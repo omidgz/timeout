@@ -3,27 +3,48 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 )
 
 func main() {
-	c := make(chan string)
+	var wg sync.WaitGroup
 
-	for i := 1; i <= 50; i++ {
+	done := 0
+	for i := 1; i <= 100; i++ {
 		go func() {
-			r := rand.Intn(50)
-			time.Sleep(time.Duration(r) * time.Second)
-			c <- fmt.Sprintf("%d", r)
+			wg.Add(1)
+			if res, err := runWithTimeout(); err == nil {
+				fmt.Printf("%s\t %d Done %s\n", time.Now().Format(time.UnixDate), done+1, res)
+				done += 1 // needed this after print
+			} else {
+				fmt.Printf("%s\t %s\n", time.Now().Format(time.UnixDate), err)
+			}
+			wg.Done()
 		}()
 	}
-	done := 0
-	for {
-		select {
-		case res := <-c:
-			done += 1
-			fmt.Printf("%s\t%d done %s\n", time.Now().Format(time.UnixDate), done, res)
-		case <-time.After(1 * time.Second):
-			fmt.Printf("%s\tTimeout!\n", time.Now().Format(time.UnixDate))
-		}
+
+	wg.Wait()
+}
+
+func theFunc() string {
+	r := rand.Intn(10)
+	time.Sleep(time.Duration(r) * time.Second)
+	return fmt.Sprintf("%d", r)
+}
+
+func runWithTimeout() (string, error) {
+	done := make(chan bool)
+	res := ""
+	go func() {
+		res = theFunc()
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		return res, nil
+	case <-time.After(3 * time.Second):
+		return "", fmt.Errorf("Timeout")
 	}
 }
